@@ -10,7 +10,7 @@
 #include "srvsys.h"
 
 #define MAX_SESSIONS 1
-
+const volatile char test[0x5000] = {0xff};
 const char CODE_PATH[] = {0x01, 0x00, 0x00, 0x00, 0x2E, 0x63, 0x6F, 0x64, 0x65, 0x00, 0x00, 0x00};
 
 typedef struct
@@ -489,6 +489,7 @@ int main()
   u32* cmdbuf;
 
   ret = 0;
+  if (test[100] == 0) ret = ret << 2;
   srv_handle = &g_handles[1];
   notification_handle = &g_handles[0];
 

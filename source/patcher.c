@@ -7,8 +7,6 @@
 #define PATH_MAX 255
 #endif
 
-static char secureinfo[0x111] = {0};
-
 // Below is stolen from http://en.wikipedia.org/wiki/Boyer%E2%80%93Moore_string_search_algorithm
 
 #define ALPHABET_LEN 256
@@ -194,208 +192,111 @@ static int file_open(IFile *file, FS_ArchiveID id, const char *path, int flags)
   return IFile_Open(file, archive, ppath, flags);
 }
 
-static int patch_secureinfo()
-{
-  IFile file;
-  Result ret;
-  u64 total;
-
-  if (secureinfo[0] == 0xFF)
-  {
-    return 0;
-  }
-  ret = file_open(&file, ARCHIVE_SDMC, "/SecureInfo_A", FS_OPEN_READ);
-  if (R_SUCCEEDED(ret))
-  {
-    ret = IFile_Read(&file, &total, secureinfo, sizeof(secureinfo));
-    IFile_Close(&file);
-    if (R_SUCCEEDED(ret) && total == sizeof(secureinfo))
-    {
-      ret = file_open(&file, ARCHIVE_NAND_RW, "/sys/SecureInfo_C", FS_OPEN_WRITE | FS_OPEN_CREATE);
-      if (R_SUCCEEDED(ret))
-      {
-        ret = IFile_Write(&file, &total, secureinfo, sizeof(secureinfo), FS_WRITE_FLUSH);
-        IFile_Close(&file);
-      }
-      secureinfo[0] = 0xFF; // we repurpose this byte as status
-    }
-  }
-  else // get file from NAND
-  {
-    ret = file_open(&file, ARCHIVE_NAND_RW, "/sys/SecureInfo_C", FS_OPEN_READ);
-    if (R_SUCCEEDED(ret))
-    {
-      ret = IFile_Read(&file, &total, secureinfo, sizeof(secureinfo));
-      IFile_Close(&file);
-      if (R_SUCCEEDED(ret) && total == sizeof(secureinfo))
-      {
-        secureinfo[0] = 0xFF;
-      }
-    }
-  }
-  return ret;
-}
-
 int patch_code(u64 progid, u8 *code, u32 size)
-{
-  if (
-      progid == 0x0004003000008F02LL || // USA Menu
-      progid == 0x0004003000008202LL || // JPN Menu
-      progid == 0x0004003000009802LL || // EUR Menu
-      progid == 0x000400300000A102LL || // CHN Menu
-      progid == 0x000400300000A902LL || // KOR Menu
-      progid == 0x000400300000B102LL    // TWN Menu
-     ) 
-  {
-    static const char region_free_pattern[] = 
-    {
-      0x00, 0x00, 0x55, 0xE3, 
-      0x01, 0x10, 0xA0, 0xE3
-    };
-    static const char region_free_patch[] = 
-    {
-      0x01, 0x00, 0xA0, 0xE3, 
-      0x1E, 0xFF, 0x2F, 0xE1
-    };
-    patch_memory(code, size, 
-      region_free_pattern, 
-      sizeof(region_free_pattern), -16, 
-      region_free_patch, 
-      sizeof(region_free_patch), 1
-    );
-  }
-  else if (progid == 0x0004013000002C02LL) // NIM
-  {
-    static const char block_updates_pattern[] = 
-    {
-      0x25, 0x79, 0x0B, 0x99
-    };
-    static const char block_updates_patch[] =
-    {
-      0xE3, 0xA0
-    };
-    static const char block_eshop_updates_pattern[] =
-    {
-      0x30, 0xB5, 0xF1, 0xB0
-    };
-    static const char block_eshop_updates_patch[] =
-    {
-      0x00, 0x20, 0x08, 0x60, 
-      0x70, 0x47
-    };
-    static const char country_resp_pattern[] = 
-    {
-      0x01, 0x20, 0x01, 0x90, 
-      0x22, 0x46, 0x06, 0x9B
-    };
-    static const char country_resp_patch_model[] = 
-    {
-      0x06, 0x9A, 0x03, 0x20, 
-      0x90, 0x47, 0x55, 0x21, 
-      0x01, 0x70, 0x53, 0x21, 
-      0x41, 0x70, 0x00, 0x21, 
-      0x81, 0x70, 0x60, 0x61, 
-      0x00, 0x20
-    };
-    const char *country;
-    char country_resp_patch[sizeof(country_resp_patch_model)];
+{    
+    switch(progid){
+        case 0x0004003000008F02LL:  //USA Menu
+        case 0x0004003000008202LL:  //JPN Menu
+        case 0x0004003000009802LL:  //EUR Menu
+        case 0x000400300000A102LL:  //CHN Menu
+        case 0x000400300000A902LL:  //KOR Menu
+        case 0x000400300000B102LL:  //TWN Menu
+        {
+            static const char region_free_pattern[] = {
+                0x00, 0x00, 0x55, 0xE3, 0x01, 0x10, 0xA0, 0xE3
+            };
+            static const char region_free_patch[] = {
+                0x01, 0x00, 0xA0, 0xE3, 0x1E, 0xFF, 0x2F, 0xE1
+            };
+            patch_memory(code, size, 
+            region_free_pattern, sizeof(region_free_pattern), -16, 
+            region_free_patch, sizeof(region_free_patch), 1
+            );
+            break;
+        }
+        case 0x0004001000020000LL:  //JPN MSET
+        case 0x0004001000021000LL:  //USA MSET
+        case 0x0004001000022000LL:  //EUR MSET
+        case 0x0004001000026000LL:  //CHN MSET
+        case 0x0004001000027000LL:  //KOR MSET
+        case 0x0004001000028000LL:  //TWN MSET
+        {
+            static const char* ver_string_pattern = u"Ver.";
+            static const char* ver_string_patch = u"\uE024Rei";
+            patch_memory(code, size, 
+            ver_string_pattern, 8, 0, 
+            ver_string_patch, 8, 1
+            );
+            break;
+        }
+        case 0x0004013000008002LL: // NS
+        {
+            static const u8 stopCartUpdatesPattern[] = {
+                0x0C, 0x18, 0xE1, 0xD8
+            };
+            static const u8 stopCartUpdatesPatch[] = {
+                0x0B, 0x18, 0x21, 0xC8
+            };
 
-    patch_memory(code, size, 
-      block_updates_pattern, 
-      sizeof(block_updates_pattern), 0, 
-      block_updates_patch, 
-      sizeof(block_updates_patch), 1
-    );
-    patch_memory(code, size, 
-      block_eshop_updates_pattern, 
-      sizeof(block_eshop_updates_pattern), 0, 
-      block_eshop_updates_patch, 
-      sizeof(block_eshop_updates_patch), 1
-    );
-    if (R_SUCCEEDED(patch_secureinfo()))
-    {
-      switch (secureinfo[0x100])
-      {
-        case 1: country = "US"; break;
-        case 2: country = "GB"; break; // sorry rest-of-Europe, you have to change this
-        case 3: country = "AU"; break;
-        case 4: country = "CN"; break;
-        case 5: country = "KR"; break;
-        case 6: country = "TW"; break;
-        default: case 0: country = "JP"; break;
-      }
-      // patch XML response Country
-      memcpy(country_resp_patch, 
-        country_resp_patch_model, 
-        sizeof(country_resp_patch_model)
-      );
-      country_resp_patch[6] = country[0];
-      country_resp_patch[10] = country[1];
-      patch_memory(code, size, 
-        country_resp_pattern, 
-        sizeof(country_resp_pattern), 0, 
-        country_resp_patch, 
-        sizeof(country_resp_patch), 1
-      );
+            //Disable updates from foreign carts (makes carts region-free)
+            patch_memory(code, size, 
+                stopCartUpdatesPattern, 
+                sizeof(stopCartUpdatesPattern), 0, 
+                stopCartUpdatesPatch,
+                sizeof(stopCartUpdatesPatch), 2
+            );
+
+            break;
+        }
+        case 0x0004013000001702LL: // CFG
+        {
+            static const u8 secureinfoSigCheckPattern[] = {
+                0x06, 0x46, 0x10, 0x48, 0xFC
+            };
+            static const u8 secureinfoSigCheckPatch[] = {
+                0x00, 0x26
+            };
+
+            //Disable SecureInfo signature check
+            patch_memory(code, size, 
+                secureinfoSigCheckPattern, 
+                sizeof(secureinfoSigCheckPattern), 0, 
+                secureinfoSigCheckPatch, 
+                sizeof(secureinfoSigCheckPatch), 1
+            );
+        }
+        case 0x0004013000002C02LL: // NIM
+        {
+            static const u8 blockAutoUpdatesPattern[] = {
+                0x25, 0x79, 0x0B, 0x99
+            };
+            static const u8 blockAutoUpdatesPatch[] = {
+                0xE3, 0xA0
+            };
+            static const u8 skipEshopUpdateCheckPattern[] = {
+                0x30, 0xB5, 0xF1, 0xB0
+            };
+            static const u8 skipEshopUpdateCheckPatch[] = {
+                0x00, 0x20, 0x08, 0x60, 0x70, 0x47
+            };
+
+            //Block silent auto-updates
+            patch_memory(code, size, 
+                blockAutoUpdatesPattern, 
+                sizeof(blockAutoUpdatesPattern), 0, 
+                blockAutoUpdatesPatch, 
+                sizeof(blockAutoUpdatesPatch), 1
+            );
+            //Skip update checks to access the EShop
+            patch_memory(code, size, 
+                skipEshopUpdateCheckPattern, 
+                sizeof(skipEshopUpdateCheckPattern), 0, 
+                skipEshopUpdateCheckPatch, 
+                sizeof(skipEshopUpdateCheckPatch), 1
+            );
+
+            break;
+        }
     }
-  }
-  else if (progid == 0x0004013000008002LL) // NS
-  {
-    static const char stop_updates_pattern[] = 
-    {
-      0x0C, 0x18, 0xE1, 0xD8
-    };
-    static const char stop_updates_patch[] = 
-    {
-      0x0B, 0x18, 0x21, 0xC8
-    };
-    patch_memory(code, size, 
-      stop_updates_pattern, 
-      sizeof(stop_updates_pattern), 0, 
-      stop_updates_patch, 
-      sizeof(stop_updates_patch), 2
-    );
-  }
-  else if (progid == 0x0004013000001702LL) // CFG
-  {
-    static const char secureinfo_sig_check_pattern[] = 
-    {
-      0x06, 0x46, 0x10, 0x48, 0xFC
-    };
-    static const char secureinfo_sig_check_patch[] = 
-    {
-      0x00, 0x26
-    };
-    static const char secureinfo_filename_pattern[] = 
-    {
-      0x53, 0x00, 0x65, 0x00, 
-      0x63, 0x00, 0x75, 0x00, 
-      0x72, 0x00, 0x65, 0x00, 
-      0x49, 0x00, 0x6E, 0x00, 
-      0x66, 0x00, 0x6F, 0x00, 
-      0x5F, 0x00
-    };
-    static const char secureinfo_filename_patch[] = 
-    {
-      0x43, 0x00
-    };
-    // disable SecureInfo signature check
-    patch_memory(code, size, 
-      secureinfo_sig_check_pattern, 
-      sizeof(secureinfo_sig_check_pattern), 0, 
-      secureinfo_sig_check_patch, 
-      sizeof(secureinfo_sig_check_patch), 1
-    );
-    if (R_SUCCEEDED(patch_secureinfo()))
-    {
-      // use SecureInfo_C
-      patch_memory(code, size, 
-        secureinfo_filename_pattern, 
-        sizeof(secureinfo_filename_pattern), 22, 
-        secureinfo_filename_patch, 
-        sizeof(secureinfo_filename_patch), 2
-      );
-    }
-  }
   return 0;
 }
