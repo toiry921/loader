@@ -23,6 +23,9 @@ SOURCES		:=	source
 DATA		:=	data
 INCLUDES	:=	include
 
+#define externally
+JUNKNUM ?= 0x4000
+
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
@@ -32,7 +35,7 @@ CFLAGS	:= -flto -Wall -Os -mword-relocations \
 			-fomit-frame-pointer -ffunction-sections -fdata-sections \
 			$(ARCH)
 
-CFLAGS	+=	$(INCLUDE) -DARM11 -D_3DS
+CFLAGS	+=	$(INCLUDE) -DARM11 -D_3DS -DJUNKNUM=$(JUNKNUM)
 
 CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu99
 
