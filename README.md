@@ -28,3 +28,7 @@ found in your decrypted FIRM dump.
 
 Once you have a NCCH of the right size, just replace it in your decrypted FIRM 
 and find a way to launch it (for example with ReiNAND).
+
+**Credits**
+ - Yifanlu for the original implementation of loader
+ - Myself (Rei) for the SD card patch system
