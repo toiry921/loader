@@ -407,6 +407,7 @@ int main(int argc, char **argv){
 
     reply_target = 0;
     term_request = 0;
+    initPatcher();
     do{
     if (reply_target == 0){
         cmdbuf = getThreadCommandBuffer();
@@ -466,7 +467,7 @@ int main(int argc, char **argv){
         }
     }
     } while (!term_request || g_active_handles != 2);
-
+    exitPatcher();
     srvSysUnregisterService("Loader");
     svcCloseHandle(*srv_handle);
     svcCloseHandle(*notification_handle);

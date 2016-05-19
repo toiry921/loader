@@ -31,4 +31,6 @@ and find a way to launch it (for example with ReiNAND).
 
 **Credits**
  - Yifanlu for the original implementation of loader
- - Myself (Rei) for the SD card patch system
+ - Steveice10 for helping me quite a bit with understanding FSUSER functions!
+ - Gudenaurock for helping a lot with debugging the new patching system!
+ - Myself (Rei) for the SD card patch system implementation

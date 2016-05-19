@@ -24,7 +24,7 @@ DATA		:=	data
 INCLUDES	:=	include
 
 #define externally
-JUNKNUM ?= 0x4000
+JUNKNUM ?= 0x1000
 
 #---------------------------------------------------------------------------------
 # options for code generation
