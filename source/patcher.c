@@ -13,14 +13,34 @@
 
 //Max number of patches that can be present in the /rei/patches folder (because RAM reasons for now)
 #define MAX_PATCHES 30
+#define MAX_PATCH_FILENAME_LEN 40
 
-Handle dirHandle;
-static char paths[MAX_PATCHES][0x25] = {0};
+//Patch vars
+IFile fp;
+char magic[4];
+char unused[0xB];
+u64 tid = 0,
+    uid = 0,
+    br = 0,
+    fileSize = 0;
+u8 pattern_length = 0, 
+   patch_length = 0,
+   patchCnt = 0,
+   titleCnt = 0,
+   patchFlag = 0;
+s8 search_multiple = 0, 
+   offset = 0;
+u8 pattern[0x100];
+u8 patch[0x100];
+u32 entryCount = 0,
+    fileCount = 0,
+    cachePos = 0;
+    Handle dirHandle;
+static char paths[MAX_PATCHES][MAX_PATCH_FILENAME_LEN] = {0};
 FS_Path dirPath = { PATH_EMPTY, 1, (u8*)"" };
 FS_Path archivePath = { PATH_EMPTY, 1, (u8*)"" };
 FS_Archive archive;
-u32 entryCount,
-    totalCount;
+u32 uidCachedArray[0x100];
  
 // delta1 table: delta1[c] contains the distance between the last
 // character of pat and the rightmost occurence of c in pat.
@@ -158,7 +178,15 @@ static int patch_memory(start, size, pattern, patsize, offset, replace, repsize,
     return i;
 }
 
-void initPatcher(){
+u8 uidArrayContains(u32 val){
+    u8 ret = 0;
+    int i; for(i = 0; i <= cachePos; i++){
+        if(uidCachedArray[i] = val) ret = 1;
+    }
+    return ret;
+}
+
+void initPatcher(void){
     Result res;
     dirPath = fsMakePath(PATH_ASCII, "/rei/patches");
     
@@ -168,69 +196,85 @@ void initPatcher(){
     // Make sure the new dir exists
     if(R_SUCCEEDED(res = FSLDR_OpenDirectory(&dirHandle, archive, dirPath))) {
         entryCount = 0;
-        totalCount = 0;
+        fileCount = 0;
         FS_DirectoryEntry entry;
+        
         //Read entries
         while(R_SUCCEEDED(FSDIR_Read(dirHandle, &entryCount, 1, &entry)) && entryCount > 0){
             //Form path
             u8 entryName[0x20];
 			memset(entryName, 0, 0x20);
             utf16_to_utf8(entryName, entry.name, NAME_MAX - 1);			
-            memcpy(paths[totalCount], "/rei/patches/", sizeof("/rei/patches/"));
-            memcpy(&paths[totalCount][13], entryName, sizeof(entryName));
-            totalCount++;
+            memcpy(paths[fileCount], "/rei/patches/", sizeof("/rei/patches/"));
+            memcpy(&paths[fileCount][13], entryName, sizeof(entryName));
+            fileCount++;
+        }
+        
+        //Cache UIDs so I dont have to waste clock cycles later.
+        int i; for(i = 0; i < fileCount; i++){
+            if(R_FAILED(IFile_Open(&fp, ARCHIVE_SDMC, archivePath, fsMakePath(PATH_ASCII, paths[i]), FS_OPEN_READ))) goto end;
+            if(R_FAILED(IFile_GetSize(&fp, &fileSize))) goto end;
+            if(R_FAILED(IFile_Read(&fp, &br, &magic, 4))) goto end;
+            if(strcmp(magic, "RNP") != 0) goto end;
+            if(R_FAILED(IFile_Read(&fp, &br, &titleCnt, 1))) goto end;
+            if(R_FAILED(IFile_Read(&fp, &br, &unused, 0xB))) goto end;
+            while(!feof(&fp) && titleCnt--){
+                if(R_FAILED(IFile_Read(&fp, &br, &uid, 3))) goto end;
+                if(!uidArrayContains(uid)){
+                    uidCachedArray[cachePos] = uid;
+                    cachePos++;
+                }
+            }
+            end:
+            IFile_Close(&fp);
         }
     }
 }
 
-void exitPatcher(){
+void exitPatcher(void){
     //Close SDMC
     FSLDR_CloseArchive(archive);
 }
 
-int patch_code(u64 progid, u8 *code, u32 size){    
-    IFile fp;
-    char magic[4];
-    char unused[0xB];
-    u64 read_id, 
-        br,
-        fileSize;
-    u8 pattern_length, 
-       patch_length;
-    s8 search_multiple, 
-       offset;
-    u8 pattern[0x100];
-    u8 patch[0x100];
-	
-    //Read patchs
-    int i; for(i = 0; i < totalCount; i++){
-        if(R_FAILED(IFile_Open(&fp, ARCHIVE_SDMC, archivePath, fsMakePath(PATH_ASCII, paths[i]), FS_OPEN_READ))) goto end;
-        if(R_FAILED(IFile_GetSize(&fp, &fileSize))) goto end;
-        if (R_FAILED(IFile_Read(&fp, &br, &magic, 4))) goto end;
-        if (R_FAILED(IFile_Read(&fp, &br, &unused, 0xC))) goto end;
-        if(strcmp(magic, "RNP") != 0) goto end;
-        while (!feof(&fp)) {
-            if (R_FAILED(IFile_Read(&fp, &br, &read_id, 8))) goto end;
-            if (R_FAILED(IFile_Read(&fp, &br, &pattern_length, 1))) goto end;
-            if (R_FAILED(IFile_Read(&fp, &br, &patch_length, 1))) goto end;
-            if (R_FAILED(IFile_Read(&fp, &br, &search_multiple, 1))) goto end;
-            if (R_FAILED(IFile_Read(&fp, &br, &offset, 1))) goto end;
-            if (R_FAILED(IFile_Read(&fp, &br, &pattern, pattern_length))) goto end;
-            if (R_FAILED(IFile_Read(&fp, &br, &patch, patch_length))) goto end;
-            if (read_id == progid) patch_memory(code, size, pattern, pattern_length, search_multiple, patch, patch_length, offset);
+int patch_code(u64 progid, u8 *code, u32 size){
+    //Read patchs if the current program's UID is in the cached array (i.e it has a patch associated with it)
+    u32 progUid = (progid & 0xFFFFFF00) >> 8;
+    int i; for(i = 0; i < fileCount; i++){
+        if(uidArrayContains(progUid)){
+            if(R_FAILED(IFile_Open(&fp, ARCHIVE_SDMC, archivePath, fsMakePath(PATH_ASCII, paths[i]), FS_OPEN_READ))) goto end;
+            if(R_FAILED(IFile_GetSize(&fp, &fileSize))) goto end;
+            if(R_FAILED(IFile_Read(&fp, &br, &magic, 4))) goto end;
+            if(strcmp(magic, "RNP") != 0) goto end;
+            if(R_FAILED(IFile_Read(&fp, &br, &titleCnt, 1))) goto end;
+            if(R_FAILED(IFile_Read(&fp, &br, &patchCnt, 1))) goto end;
+            if(R_FAILED(IFile_Read(&fp, &br, &unused, 0xA))) goto end;
+            while(!feof(&fp) && titleCnt--){
+                if(R_FAILED(IFile_Read(&fp, &br, &uid, 3))) goto end;
+                if(uid == progUid) patchFlag = 1;
+            }
+            if(!patchFlag) goto end;
+            while(!feof(&fp) && patchCnt--){
+                if(R_FAILED(IFile_Read(&fp, &br, &pattern_length, 1))) goto end;
+                if(R_FAILED(IFile_Read(&fp, &br, &patch_length, 1))) goto end;
+                if(R_FAILED(IFile_Read(&fp, &br, &search_multiple, 1))) goto end;
+                if(R_FAILED(IFile_Read(&fp, &br, &offset, 1))) goto end;
+                if(R_FAILED(IFile_Read(&fp, &br, &pattern, pattern_length))) goto end;
+                if(R_FAILED(IFile_Read(&fp, &br, &patch, patch_length))) goto end;
+                patch_memory(code, size, pattern, pattern_length, search_multiple, patch, patch_length, offset);
+            }
+            end:
+            IFile_Close(&fp);
         }
-        end:
-        IFile_Close(&fp);
     }
     
     //Hardcoding Rei string here so it cant be changed ;^)
-    switch(progid){
-        case 0x0004001000020000LL:  //JPN MSET
-        case 0x0004001000021000LL:  //USA MSET
-        case 0x0004001000022000LL:  //EUR MSET
-        case 0x0004001000026000LL:  //CHN MSET
-        case 0x0004001000027000LL:  //KOR MSET
-        case 0x0004001000028000LL:  //TWN MSET
+    switch(progUid){
+        case 0x200:  //JPN MSET
+        case 0x210:  //USA MSET
+        case 0x220:  //EUR MSET
+        case 0x260:  //CHN MSET
+        case 0x270:  //KOR MSET
+        case 0x280:  //TWN MSET
         {
             static const char* ver_string_pattern = u"Ver.";
             static const char* ver_string_patch = u"\uE024Rei";

@@ -12,7 +12,9 @@ Result IFile_Open(IFile *file, FS_ArchiveID archiveId, FS_Path archivePath, FS_P
 }
 
 Result IFile_Close(IFile *file){
-  return FSFILE_Close(file->handle);
+  Result res = FSFILE_Close(file->handle);
+  file->handle = 0;
+  return res;
 }
 
 Result IFile_GetSize(IFile *file, u64 *size){

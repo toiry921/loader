@@ -15,7 +15,6 @@
 #define JUNKNUM 0x4000
 #endif
 
-const volatile char test[JUNKNUM] = {0xff};  //Junk data
 const char CODE_PATH[] = {0x01, 0x00, 0x00, 0x00, 0x2E, 0x63, 0x6F, 0x64, 0x65, 0x00, 0x00, 0x00};
 
 typedef struct{
@@ -393,8 +392,6 @@ int main(int argc, char **argv){
     s32 index;
     int i, term_request;
     u32* cmdbuf;
-
-    test[0]; //Filler junk
 
     srv_handle = &g_handles[1];
     notification_handle = &g_handles[0];
