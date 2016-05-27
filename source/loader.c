@@ -11,10 +11,6 @@
 
 #define MAX_SESSIONS 1
 
-#ifndef JUNKNUM
-#define JUNKNUM 0x4000
-#endif
-
 const char CODE_PATH[] = {0x01, 0x00, 0x00, 0x00, 0x2E, 0x63, 0x6F, 0x64, 0x65, 0x00, 0x00, 0x00};
 
 typedef struct{
@@ -414,7 +410,7 @@ int main(int argc, char **argv){
 
     if (R_FAILED(ret)){
         // check if any handle has been closed
-        if (ret == 0xC920181A){
+        if (ret == (Result)0xC920181A){
             if (index == -1){
                 for (i = 2; i < MAX_SESSIONS+2; i++){
                     if (g_handles[i] == reply_target){

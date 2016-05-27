@@ -1,6 +1,6 @@
 #include <3ds.h>
 #include <string.h>
-#include <stdlib.h>
+#include <wchar.h>
 #include "patcher.h"
 #include "ifile.h"
 #include "fsldr.h"
@@ -13,34 +13,33 @@
 
 //Max number of patches that can be present in the /rei/patches folder (because RAM reasons for now)
 #define MAX_PATCHES 30
-#define MAX_PATCH_FILENAME_LEN 40
+#define MAX_PATCH_FILENAME_LEN 50
 
 //Patch vars
-IFile fp;
-char magic[4];
-char unused[0xB];
-u64 tid = 0,
-    uid = 0,
-    br = 0,
-    fileSize = 0;
-u8 pattern_length = 0, 
-   patch_length = 0,
-   patchCnt = 0,
-   titleCnt = 0,
-   patchFlag = 0;
-s8 search_multiple = 0, 
-   offset = 0;
-u8 pattern[0x100];
-u8 patch[0x100];
-u32 entryCount = 0,
-    fileCount = 0,
-    cachePos = 0;
-    Handle dirHandle;
+static IFile fp;
+static char magic[4];
+static char unused[0xB];
+static u64  uid = 0,
+            br = 0,
+            fileSize = 0;
+static u8 pattern_length = 0, 
+          patch_length = 0,
+          patchCnt = 0,
+          titleCnt = 0,
+          patchFlag = 0;
+static s8 search_multiple = 0, 
+          offset = 0;
+static u32 entryCount = 0,
+           fileCount = 0,
+           cachePos = 0;
+           Handle dirHandle;
+static u8 pattern[0x100];
+static u8 patch[0x100];
+static u32 uidCachedArray[0x100];
 static char paths[MAX_PATCHES][MAX_PATCH_FILENAME_LEN] = {0};
-FS_Path dirPath = { PATH_EMPTY, 1, (u8*)"" };
-FS_Path archivePath = { PATH_EMPTY, 1, (u8*)"" };
-FS_Archive archive;
-u32 uidCachedArray[0x100];
+static FS_Path dirPath = { PATH_EMPTY, 1, (u8*)"" };
+static FS_Path archivePath = { PATH_EMPTY, 1, (u8*)"" };
+static FS_Archive archive = 0;
  
 // delta1 table: delta1[c] contains the distance between the last
 // character of pat and the rightmost occurence of c in pat.
@@ -180,8 +179,8 @@ static int patch_memory(start, size, pattern, patsize, offset, replace, repsize,
 
 u8 uidArrayContains(u32 val){
     u8 ret = 0;
-    int i; for(i = 0; i <= cachePos; i++){
-        if(uidCachedArray[i] = val) ret = 1;
+    u32 i; for(i = 0; i <= cachePos; i++){
+        if(uidCachedArray[i] == val) ret = 1;
     }
     return ret;
 }
@@ -189,8 +188,8 @@ u8 uidArrayContains(u32 val){
 void initPatcher(void){
     Result res;
     dirPath = fsMakePath(PATH_ASCII, "/rei/patches");
-    
-     //Open SDMC
+
+    //Open SDMC
     FSLDR_OpenArchive(&archive, ARCHIVE_SDMC, archivePath);
 
     // Make sure the new dir exists
@@ -198,20 +197,21 @@ void initPatcher(void){
         entryCount = 0;
         fileCount = 0;
         FS_DirectoryEntry entry;
+        char entryName[0x20];
+        char *basePath = "/rei/patches/";
         
         //Read entries
         while(R_SUCCEEDED(FSDIR_Read(dirHandle, &entryCount, 1, &entry)) && entryCount > 0){
             //Form path
-            u8 entryName[0x20];
 			memset(entryName, 0, 0x20);
-            utf16_to_utf8(entryName, entry.name, NAME_MAX - 1);			
-            memcpy(paths[fileCount], "/rei/patches/", sizeof("/rei/patches/"));
-            memcpy(&paths[fileCount][13], entryName, sizeof(entryName));
+            utf16_to_utf8((u8*)entryName, (u16*)entry.name, NAME_MAX - 1);			
+            memcpy(paths[fileCount], basePath, strlen(basePath));
+            memcpy(&paths[fileCount][strlen(basePath)], entryName, strlen(entryName));
             fileCount++;
         }
         
         //Cache UIDs so I dont have to waste clock cycles later.
-        int i; for(i = 0; i < fileCount; i++){
+        u32 i; for(i = 0; i < fileCount; i++){
             if(R_FAILED(IFile_Open(&fp, ARCHIVE_SDMC, archivePath, fsMakePath(PATH_ASCII, paths[i]), FS_OPEN_READ))) goto end;
             if(R_FAILED(IFile_GetSize(&fp, &fileSize))) goto end;
             if(R_FAILED(IFile_Read(&fp, &br, &magic, 4))) goto end;
@@ -239,7 +239,7 @@ void exitPatcher(void){
 int patch_code(u64 progid, u8 *code, u32 size){
     //Read patchs if the current program's UID is in the cached array (i.e it has a patch associated with it)
     u32 progUid = (progid & 0xFFFFFF00) >> 8;
-    int i; for(i = 0; i < fileCount; i++){
+    u32 i; for(i = 0; i < fileCount; i++){
         if(uidArrayContains(progUid)){
             if(R_FAILED(IFile_Open(&fp, ARCHIVE_SDMC, archivePath, fsMakePath(PATH_ASCII, paths[i]), FS_OPEN_READ))) goto end;
             if(R_FAILED(IFile_GetSize(&fp, &fileSize))) goto end;
@@ -276,11 +276,10 @@ int patch_code(u64 progid, u8 *code, u32 size){
         case 0x270:  //KOR MSET
         case 0x280:  //TWN MSET
         {
-            static const char* ver_string_pattern = u"Ver.";
-            static const char* ver_string_patch = u"\uE024Rei";
-            patch_memory(code, size, 
-            ver_string_pattern, 8, 0, 
-            ver_string_patch, 8, 1
+            patch_memory(
+            code, size, 
+            u"Ver.", 8, 0, 
+            u"\uE024Rei", 8, 1
             );
             break;
         }

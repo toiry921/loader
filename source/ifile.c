@@ -1,4 +1,5 @@
 #include <3ds.h>
+#include <string.h>
 #include "ifile.h"
 #include "fsldr.h"
 
