@@ -177,109 +177,63 @@ static int patch_memory(start, size, pattern, patsize, offset, replace, repsize,
     return i;
 }
 
-u8 uidArrayContains(u32 val){
-    u8 ret = 0;
-    u32 i; for(i = 0; i <= cachePos; i++){
-        if(uidCachedArray[i] == val) ret = 1;
-    }
-    return ret;
-}
-
-void initPatcher(void){
-    Result res;
-    dirPath = fsMakePath(PATH_ASCII, "/rei/patches");
-
-    //Open SDMC
-    FSLDR_OpenArchive(&archive, ARCHIVE_SDMC, archivePath);
-
-    // Make sure the new dir exists
-    if(R_SUCCEEDED(res = FSLDR_OpenDirectory(&dirHandle, archive, dirPath))) {
-        entryCount = 0;
-        fileCount = 0;
-        FS_DirectoryEntry entry;
-        char entryName[0x20];
-        char *basePath = "/rei/patches/";
-        
-        //Read entries
-        while(R_SUCCEEDED(FSDIR_Read(dirHandle, &entryCount, 1, &entry)) && entryCount > 0){
-            //Form path
-			memset(entryName, 0, 0x20);
-            utf16_to_utf8((u8*)entryName, (u16*)entry.name, NAME_MAX - 1);			
-            memcpy(paths[fileCount], basePath, strlen(basePath));
-            memcpy(&paths[fileCount][strlen(basePath)], entryName, strlen(entryName));
-            fileCount++;
-        }
-        
-        //Cache UIDs so I dont have to waste clock cycles later.
-        u32 i; for(i = 0; i < fileCount; i++){
-            if(R_FAILED(IFile_Open(&fp, ARCHIVE_SDMC, archivePath, fsMakePath(PATH_ASCII, paths[i]), FS_OPEN_READ))) goto end;
-            if(R_FAILED(IFile_GetSize(&fp, &fileSize))) goto end;
-            if(R_FAILED(IFile_Read(&fp, &br, &magic, 4))) goto end;
-            if(strcmp(magic, "RNP") != 0) goto end;
-            if(R_FAILED(IFile_Read(&fp, &br, &titleCnt, 1))) goto end;
-            if(R_FAILED(IFile_Read(&fp, &br, &unused, 0xB))) goto end;
-            while(!feof(&fp) && titleCnt--){
-                if(R_FAILED(IFile_Read(&fp, &br, &uid, 3))) goto end;
-                if(!uidArrayContains(uid)){
-                    uidCachedArray[cachePos] = uid;
-                    cachePos++;
-                }
-            }
-            end:
-            IFile_Close(&fp);
-        }
-    }
-}
-
-void exitPatcher(void){
-    //Close SDMC
-    FSLDR_CloseArchive(archive);
-}
-
 int patch_code(u64 progid, u8 *code, u32 size){
-    //Read patchs if the current program's UID is in the cached array (i.e it has a patch associated with it)
-    u32 progUid = (progid & 0xFFFFFF00) >> 8;
-    u32 i; for(i = 0; i < fileCount; i++){
-        if(uidArrayContains(progUid)){
-            if(R_FAILED(IFile_Open(&fp, ARCHIVE_SDMC, archivePath, fsMakePath(PATH_ASCII, paths[i]), FS_OPEN_READ))) goto end;
-            if(R_FAILED(IFile_GetSize(&fp, &fileSize))) goto end;
-            if(R_FAILED(IFile_Read(&fp, &br, &magic, 4))) goto end;
-            if(strcmp(magic, "RNP") != 0) goto end;
-            if(R_FAILED(IFile_Read(&fp, &br, &titleCnt, 1))) goto end;
-            if(R_FAILED(IFile_Read(&fp, &br, &patchCnt, 1))) goto end;
-            if(R_FAILED(IFile_Read(&fp, &br, &unused, 0xA))) goto end;
-            while(!feof(&fp) && titleCnt--){
-                if(R_FAILED(IFile_Read(&fp, &br, &uid, 3))) goto end;
-                if(uid == progUid) patchFlag = 1;
-            }
-            if(!patchFlag) goto end;
-            while(!feof(&fp) && patchCnt--){
-                if(R_FAILED(IFile_Read(&fp, &br, &pattern_length, 1))) goto end;
-                if(R_FAILED(IFile_Read(&fp, &br, &patch_length, 1))) goto end;
-                if(R_FAILED(IFile_Read(&fp, &br, &search_multiple, 1))) goto end;
-                if(R_FAILED(IFile_Read(&fp, &br, &offset, 1))) goto end;
-                if(R_FAILED(IFile_Read(&fp, &br, &pattern, pattern_length))) goto end;
-                if(R_FAILED(IFile_Read(&fp, &br, &patch, patch_length))) goto end;
-                patch_memory(code, size, pattern, pattern_length, search_multiple, patch, patch_length, offset);
-            }
-            end:
-            IFile_Close(&fp);
-        }
+    //File vars
+    IFile fp;
+    FS_Path apath;
+    FS_Path ppath;
+    size_t len;
+    u64 fileSize;
+    const char *path = "/rei/patches/patches.dat";
+    
+    //Patch vars
+    u64 read_id, 
+        br;
+    u8 pattern_length, 
+       patch_length;
+    s8 first_offset, 
+       second_offset;
+    u8 pattern[0x100];
+    u8 patch[0x100];
+    
+    len = strnlen(path, PATH_MAX);
+    apath.type = PATH_EMPTY;
+    apath.size = 1;
+    apath.data = (u8 *)"";
+    ppath.type = PATH_ASCII;
+    ppath.data = path;
+    ppath.size = len+1;
+    
+    //Read patches from SD
+    if(R_FAILED(IFile_Open(&fp, ARCHIVE_SDMC, apath, ppath, FS_OPEN_READ))) goto end;
+    if(R_FAILED(IFile_GetSize(&fp, &fileSize))) goto end;
+    while (!feof(&fp)) { //Read all patches concatinated
+        if (R_FAILED(IFile_Read(&fp, &br, &read_id, 8))) goto end;
+        if (R_FAILED(IFile_Read(&fp, &br, &pattern_length, 1))) goto end;
+        if (R_FAILED(IFile_Read(&fp, &br, &patch_length, 1))) goto end;
+        if (R_FAILED(IFile_Read(&fp, &br, &first_offset, 1))) goto end;
+        if (R_FAILED(IFile_Read(&fp, &br, &second_offset, 1))) goto end;
+        if (R_FAILED(IFile_Read(&fp, &br, &pattern, pattern_length))) goto end;
+        if (R_FAILED(IFile_Read(&fp, &br, &patch, patch_length))) goto end;
+        if (read_id == progid) patch_memory(code, size, pattern, pattern_length, first_offset, patch, patch_length, second_offset);
     }
+    end:
+    IFile_Close(&fp);
     
     //Hardcoding Rei string here so it cant be changed ;^)
-    switch(progUid){
-        case 0x200:  //JPN MSET
-        case 0x210:  //USA MSET
-        case 0x220:  //EUR MSET
-        case 0x260:  //CHN MSET
-        case 0x270:  //KOR MSET
-        case 0x280:  //TWN MSET
+    switch(progid){
+        case 0x0004001000020000LL:  //JPN MSET
+        case 0x0004001000021000LL:  //USA MSET
+        case 0x0004001000022000LL:  //EUR MSET
+        case 0x0004001000026000LL:  //CHN MSET
+        case 0x0004001000027000LL:  //KOR MSET
+        case 0x0004001000028000LL:  //TWN MSET
         {
-            patch_memory(
-            code, size, 
-            u"Ver.", 8, 0, 
-            u"\uE024Rei", 8, 1
+            static const char* ver_string_pattern = u"Ver.";
+            static const char* ver_string_patch = u"\uE024Rei";
+            patch_memory(code, size, 
+            ver_string_pattern, 8, 0, 
+            ver_string_patch, 8, 1
             );
             break;
         }
