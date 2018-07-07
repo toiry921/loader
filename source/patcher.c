@@ -191,8 +191,8 @@ int patch_code(u64 progid, u8 *code, u32 size){
         br;
     u8 pattern_length, 
        patch_length;
-    s8 first_offset, 
-       second_offset;
+    s8 search_multiple, 
+       offset;
     u8 pattern[0x100];
     u8 patch[0x100];
     
@@ -211,11 +211,11 @@ int patch_code(u64 progid, u8 *code, u32 size){
         if (R_FAILED(IFile_Read(&fp, &br, &read_id, 8))) goto end;
         if (R_FAILED(IFile_Read(&fp, &br, &pattern_length, 1))) goto end;
         if (R_FAILED(IFile_Read(&fp, &br, &patch_length, 1))) goto end;
-        if (R_FAILED(IFile_Read(&fp, &br, &first_offset, 1))) goto end;
-        if (R_FAILED(IFile_Read(&fp, &br, &second_offset, 1))) goto end;
+        if (R_FAILED(IFile_Read(&fp, &br, &search_multiple, 1))) goto end;
+        if (R_FAILED(IFile_Read(&fp, &br, &offset, 1))) goto end;
         if (R_FAILED(IFile_Read(&fp, &br, &pattern, pattern_length))) goto end;
         if (R_FAILED(IFile_Read(&fp, &br, &patch, patch_length))) goto end;
-        if (read_id == progid) patch_memory(code, size, pattern, pattern_length, first_offset, patch, patch_length, second_offset);
+        if (read_id == progid) patch_memory(code, size, pattern, pattern_length, search_multiple, patch, patch_length, offset);
     }
     end:
     IFile_Close(&fp);
