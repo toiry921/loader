@@ -38,7 +38,7 @@ Result FSREG_CheckHostLoadId(u64 prog_handle)
   return cmdbuf[1];
 }
 
-Result FSREG_LoadProgram(u64 *prog_handle, FS_ProgramInfo *title)
+Result FSREG_LoadProgram(u64 *prog_handle, const FS_ProgramInfo *title)
 {
   u32 *cmdbuf = getThreadCommandBuffer();
 
@@ -54,7 +54,7 @@ Result FSREG_LoadProgram(u64 *prog_handle, FS_ProgramInfo *title)
   return cmdbuf[1];
 }
 
-Result FSREG_GetProgramInfo(exheader_header *exheader, u32 entry_count, u64 prog_handle)
+Result FSREG_GetProgramInfo(ExHeader_Info *exheader, u32 entry_count, u64 prog_handle)
 {
   u32 *cmdbuf = getThreadCommandBuffer();
 
@@ -97,7 +97,7 @@ Result FSREG_Unregister(u32 pid)
   return cmdbuf[1];
 }
 
-Result FSREG_Register(u32 pid, u64 prog_handle, FS_ProgramInfo *info, void *storageinfo)
+Result FSREG_Register(u32 pid, u64 prog_handle, const FS_ProgramInfo *info, const ExHeader_Arm11StorageInfo *storageinfo)
 {
   u32 *cmdbuf = getThreadCommandBuffer();
 

@@ -24,7 +24,7 @@ void pxipmExit(void)
   svcCloseHandle(pxipmHandle);
 }
 
-Result PXIPM_RegisterProgram(u64 *prog_handle, FS_ProgramInfo *title, FS_ProgramInfo *update)
+Result PXIPM_RegisterProgram(u64 *prog_handle, const FS_ProgramInfo *title, const FS_ProgramInfo *update)
 {
   u32 *cmdbuf = getThreadCommandBuffer();
 
@@ -43,7 +43,7 @@ Result PXIPM_RegisterProgram(u64 *prog_handle, FS_ProgramInfo *title, FS_Program
   return cmdbuf[1];
 }
 
-Result PXIPM_GetProgramInfo(exheader_header *exheader, u64 prog_handle)
+Result PXIPM_GetProgramInfo(ExHeader_Info *exheader, u64 prog_handle)
 {
   u32 *cmdbuf = getThreadCommandBuffer();
 
