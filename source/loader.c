@@ -163,7 +163,7 @@ static Result loader_LoadProcess(Handle *process, u64 prog_handle){
     prog_addrs_t shared_addr;
     prog_addrs_t vaddr;
     Handle codeset;
-    CodeSetInfo codesetinfo;
+    CodeSetHeader codesetinfo;
     u32 data_mem_size;
     u64 progid;
 
@@ -210,7 +210,7 @@ static Result loader_LoadProcess(Handle *process, u64 prog_handle){
         codesetinfo.rw_addr = vaddr.data_addr;
         codesetinfo.rw_size = vaddr.data_size;
         codesetinfo.rw_size_total = data_mem_size;
-        res = svcCreateCodeSet(&codeset, &codesetinfo, (void *)shared_addr.text_addr, (void *)shared_addr.ro_addr, (void *)shared_addr.data_addr);
+        res = svcCreateCodeSet(&codeset, &codesetinfo, shared_addr.text_addr, shared_addr.ro_addr, shared_addr.data_addr);
         if (res >= 0){
           res = svcCreateProcess(process, codeset, g_exheader.arm11kernelcaps.descriptors, count);
           svcCloseHandle(codeset);
